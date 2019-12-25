@@ -11,7 +11,7 @@ void main() {
   runApp(
     MaterialApp(
       theme: ThemeData.dark(),
-      home: LoadImage()
+      home: FacePage()
     )
   );
 }

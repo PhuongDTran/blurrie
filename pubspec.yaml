@@ -31,7 +31,7 @@ dev_dependencies:
   path_provider:
   path:
   image_picker:
-
+  firebase_ml_vision: ^0.9.3+5
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
