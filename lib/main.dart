@@ -1,135 +1,100 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_ml_vision/firebase_ml_vision.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:camera/camera.dart';
 import 'package:path/path.dart' show join;
 import 'package:path_provider/path_provider.dart';
-import 'photo_picker.dart';
+import 'camera.dart';
 
-void main() {
-  runApp(
-    MaterialApp(
-      theme: ThemeData.dark(),
-      home: FacePage()
-    )
-  );
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Obtain a list of the available cameras on the device.
+  final cameras = await availableCameras();
+
+  // Get a specific camera from the list of available cameras.
+  final firstCamera = cameras.first;
+  runApp(MaterialApp(theme: ThemeData.dark(), home: MainPage()));
 }
 
-// Future<void> main() async {
-//     WidgetsFlutterBinding.ensureInitialized();
-//   // Obtain a list of the available cameras on the device.
-//   final cameras = await availableCameras();
-
-//   // Get a specific camera from the list of available cameras.
-//   final firstCamera = cameras.first;
-//   runApp(
-//     MaterialApp(
-//       theme: ThemeData.dark(),
-//       home: TakePictureScreen(
-//         // Pass the appropriate camera to the TakePictureScreen widget.
-//         camera: firstCamera,
-//       ),
-//     ),
-//   );
-// }
-
-
-// A screen that allows users to take a picture using a given camera.
-class TakePictureScreen extends StatefulWidget {
-  final CameraDescription camera;
-
-  const TakePictureScreen({
-    Key key,
-    @required this.camera,
-  }) : super(key: key);
-
+class MainPage extends StatefulWidget {
   @override
-  TakePictureScreenState createState() => TakePictureScreenState();
+  _MainPageState createState() => _MainPageState();
 }
 
-class TakePictureScreenState extends State<TakePictureScreen> {
-  CameraController _controller;
-  Future<void> _initializeControllerFuture;
+class _MainPageState extends State<MainPage> {
+  File _imageFile;
+  ui.Image _image;
+  List<Face> _faces;
+  bool isLoading = false;
 
-  @override
-  void initState() {
-    super.initState();
-    // To display the current output from the Camera,
-    // create a CameraController.
-    _controller = CameraController(
-      // Get a specific camera from the list of available cameras.
-      widget.camera,
-      // Define the resolution to use.
-      ResolutionPreset.medium,
-    );
 
-    // Next, initialize the controller. This returns a Future.
-    _initializeControllerFuture = _controller.initialize();
+  _getImageFromLib() async {
+    final imageFile = await ImagePicker.pickImage(source: ImageSource.gallery);
+    await _detectFaces(imageFile);
   }
 
-  @override
-  void dispose() {
-    // Dispose of the controller when the widget is disposed.
-    _controller.dispose();
-    super.dispose();
+  _detectFaces(File imageFile) async {
+    print(imageFile);
+    if (imageFile == null) {
+      return;
+    }
+    setState(() {
+      isLoading = true;
+    });
+    final image = FirebaseVisionImage.fromFile(imageFile);
+    final faceDetector = FirebaseVision.instance.faceDetector();
+    List<Face> faces = await faceDetector.processImage(image);
+    if (mounted) {
+      setState(() {
+        _imageFile = imageFile;
+        _faces = faces;
+        isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Take a picture')),
-      // Wait until the controller is initialized before displaying the
-      // camera preview. Use a FutureBuilder to display a loading spinner
-      // until the controller has finished initializing.
-      body: FutureBuilder<void>(
-        future: _initializeControllerFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
-            // If the Future is complete, display the preview.
-            return CameraPreview(_controller);
-          } else {
-            // Otherwise, display a loading indicator.
-            return Center(child: CircularProgressIndicator());
-          }
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.camera_alt),
-        // Provide an onPressed callback.
-        onPressed: () async {
-          // Take the Picture in a try / catch block. If anything goes wrong,
-          // catch the error.
-          try {
-            // Ensure that the camera is initialized.
-            await _initializeControllerFuture;
-
-            // Construct the path where the image should be saved using the
-            // pattern package.
-            final path = join(
-              // Store the picture in the temp directory.
-              // Find the temp directory using the `path_provider` plugin.
-              (await getTemporaryDirectory()).path,
-              '${DateTime.now()}.png',
-            );
-
-            // Attempt to take a picture and log where it's been saved.
-            await _controller.takePicture(path);
-
-            // If the picture was taken, display it on a new screen.
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => DisplayPictureScreen(imagePath: path),
-              ),
-            );
-          } catch (e) {
-            // If an error occurs, log the error to the console.
-            print(e);
-          }
-        },
-      ),
-    );
+        appBar: AppBar(title: Text('Take a picture')),
+        // Wait until the controller is initialized before displaying the
+        // camera preview. Use a FutureBuilder to display a loading spinner
+        // until the controller has finished initializing.
+        body: isLoading
+            ? Center(child: CircularProgressIndicator())
+            : (_imageFile == null)
+                ? Center(child: Text('No image selected'))
+                : Center(child: Image.file(_imageFile)),
+        floatingActionButton: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              FloatingActionButton(
+                  heroTag: "camera",
+                  child: Icon(Icons.camera_alt),
+                  // Provide an onPressed callback.
+                  onPressed: () async {
+                    final cameras = await availableCameras();
+                    String imagePath = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) =>
+                                TakePictureScreen(camera: cameras.first)));
+                    print(imagePath);
+                    await _detectFaces(File(imagePath));
+                  }),
+              SizedBox(height: 5),
+              FloatingActionButton(
+                heroTag: "choose-photo",
+                onPressed: _getImageFromLib,
+                tooltip: 'Choose a photo from library',
+                child: Icon(Icons.library_add),
+              )
+            ]));
   }
 }
 
@@ -146,6 +111,55 @@ class DisplayPictureScreen extends StatelessWidget {
       // The image is stored as a file on the device. Use the `Image.file`
       // constructor with the given path to display the image.
       body: Image.file(File(imagePath)),
+    );
+  }
+}
+
+class FacePainter extends CustomPainter {
+  final ui.Image image;
+  final List<Face> faces;
+  final List<Rect> rects = [];
+
+  FacePainter(this.image, this.faces) {
+    for (var i = 0; i < faces.length; i++) {
+      rects.add(faces[i].boundingBox);
+    }
+  }
+
+  @override
+  void paint(ui.Canvas canvas, ui.Size size) {
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0
+      ..color = Colors.red;
+
+    canvas.drawImage(image, Offset.zero, Paint());
+    for (var i = 0; i < faces.length; i++) {
+      canvas.drawRect(rects[i], paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(FacePainter oldDelegate) {
+    return image != oldDelegate.image || faces != oldDelegate.faces;
+  }
+}
+
+class SecondRoute extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Second Route"),
+      ),
+      body: Center(
+        child: RaisedButton(
+          onPressed: () {
+            // Navigate back to first route when tapped.
+          },
+          child: Text('Go back!'),
+        ),
+      ),
     );
   }
 }

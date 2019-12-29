@@ -5,6 +5,9 @@ A new Flutter project.
 ## Getting Started
 
 This project is a starting point for a Flutter application.
+https://github.com/Akora-IngDKB/flutter_face_detection
+
+https://flutter.dev/docs/cookbook/plugins/picture-using-camera#complete-example
 
 A few resources to get you started if this is your first Flutter project:
 
